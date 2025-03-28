@@ -139,7 +139,7 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
 
                 return {
                   id: userProfile.id,
-                  name: userProfile.username, // Use username since name doesn't exist in the profile
+                  name: userProfile.username, // Using username as name since name doesn't exist
                   username: userProfile.username,
                   avatar: userProfile.avatar_url || '/placeholder.svg',
                   isModerator: participant.is_moderator,
@@ -169,9 +169,9 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
             return {
               id: room.id,
               name: room.name,
-              description: room.description || 'Join the conversation',
+              description: room.description || 'Join the conversation', // Default if missing
               participants: participants.length,
-              topic: room.topic || 'General',
+              topic: room.topic || 'General', // Default if missing
               speakers,
               coverImage: '/placeholder.svg',
               color: colors[colorIndex],
@@ -360,7 +360,7 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       await fetchRooms();
       await joinRoom(newRoom.id);
       
-      return newRoom.id;
+      // Intentionally not returning the room ID to match the void return type
     } catch (error: any) {
       console.error('Error creating room:', error);
       toast.error(error.message || 'Failed to create room');
