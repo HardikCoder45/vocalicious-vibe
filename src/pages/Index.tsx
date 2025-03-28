@@ -1,12 +1,129 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import React, { useEffect, useState } from 'react';
+import { Button } from "@/components/ui/button";
+import RoomCard from '@/components/RoomCard';
+import { Plus, Mic, Flame, Clock } from "lucide-react";
+import { useRoom } from '@/context/RoomContext';
+import { useNavigate } from 'react-router-dom';
+import ParticleBackground from '@/components/ParticleBackground';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 
 const Index = () => {
+  const { rooms, joinRoom } = useRoom();
+  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate loading
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const handleCreateRoom = () => {
+    navigate('/create-room');
+  };
+
+  const handleJoinRoom = (roomId: string) => {
+    joinRoom(roomId);
+    navigate(`/room/${roomId}`);
+  };
+
+  const liveRooms = rooms.filter(room => room.isLive);
+  const upcomingRooms = rooms.filter(room => !room.isLive);
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-gray-600">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen w-full pb-16 md:pl-16 md:pb-0">
+      <ParticleBackground particleCount={30} />
+      
+      <header className="px-4 py-6 flex flex-col gap-2 md:px-8 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold gradient-purple">Vibe</h1>
+          <Button 
+            onClick={handleCreateRoom}
+            className="flex items-center gap-2 group"
+          >
+            <Plus className="h-5 w-5 group-hover:rotate-90 transition-transform duration-300" />
+            Create Room
+          </Button>
+        </div>
+        <p className="text-muted-foreground">Join a voice room or start your own conversation</p>
+      </header>
+      
+      <main className="px-4 md:px-8 pb-8 relative">
+        <Tabs defaultValue="live" className="w-full animate-fade-in">
+          <TabsList className="mb-6">
+            <TabsTrigger value="live" className="gap-2">
+              <Flame className="h-4 w-4 text-red-500" />
+              Live Now
+            </TabsTrigger>
+            <TabsTrigger value="upcoming" className="gap-2">
+              <Clock className="h-4 w-4" />
+              Upcoming
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="live" className="animate-fade-in space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {liveRooms.map((room, index) => (
+                <div 
+                  key={room.id} 
+                  className="animate-fade-in" 
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <RoomCard 
+                    room={room} 
+                    onClick={() => handleJoinRoom(room.id)} 
+                  />
+                </div>
+              ))}
+            </div>
+            
+            {liveRooms.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center py-12 text-center text-muted-foreground animate-fade-in">
+                <Mic className="h-16 w-16 mb-4 opacity-20" />
+                <h3 className="text-xl font-medium mb-2">No live rooms</h3>
+                <p>Be the first to start a conversation</p>
+                <Button onClick={handleCreateRoom} className="mt-4">Create Room</Button>
+              </div>
+            )}
+          </TabsContent>
+          
+          <TabsContent value="upcoming" className="animate-fade-in space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {upcomingRooms.map((room, index) => (
+                <div 
+                  key={room.id} 
+                  className="animate-fade-in" 
+                  style={{ animationDelay: `${index * 100}ms` }}
+                >
+                  <RoomCard 
+                    room={room} 
+                    onClick={() => handleJoinRoom(room.id)} 
+                  />
+                </div>
+              ))}
+            </div>
+            
+            {upcomingRooms.length === 0 && !isLoading && (
+              <div className="flex flex-col items-center py-12 text-center text-muted-foreground animate-fade-in">
+                <Clock className="h-16 w-16 mb-4 opacity-20" />
+                <h3 className="text-xl font-medium mb-2">No upcoming rooms</h3>
+                <p>Schedule a conversation for later</p>
+                <Button onClick={handleCreateRoom} className="mt-4">Schedule Room</Button>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+        
+        {isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="room-card animate-pulse h-64 bg-muted"></div>
+            ))}
+          </div>
+        )}
+      </main>
     </div>
   );
 };
