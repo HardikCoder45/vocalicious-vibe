@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus, MoreHorizontal, Share2, Heart } from "lucide-react";
+import { ArrowLeft, Plus, MoreHorizontal, Share2, Heart, Mic } from "lucide-react";
 import Avatar from '@/components/Avatar';
 import MicrophoneButton from '@/components/MicrophoneButton';
 import WaveformVisualizer from '@/components/WaveformVisualizer';
