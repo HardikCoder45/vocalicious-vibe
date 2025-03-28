@@ -120,9 +120,10 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
               return null;
             }
 
+            // Fix: Use username instead of name since 'name' doesn't exist in the profile type
             return {
               id: userProfile.id,
-              name: userProfile.name || userProfile.username,
+              name: userProfile.username, // Use username as name since name property doesn't exist
               username: userProfile.username,
               avatar: userProfile.avatar_url || '/placeholder.svg',
               isModerator: participant.is_moderator,
