@@ -1,11 +1,14 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useUser } from "./UserContext";
 
 // Types
 export interface Speaker {
   id: string;
   name: string;
+  username: string;
   avatar: string;
   isModerator: boolean;
   isSpeaking: boolean;
@@ -21,200 +24,304 @@ export interface RoomData {
   coverImage: string;
   color: string;
   isLive: boolean;
+  created_by: string;
+  created_at: string;
 }
 
 interface RoomContextType {
   rooms: RoomData[];
   currentRoom: RoomData | null;
-  joinRoom: (roomId: string) => void;
-  leaveRoom: () => void;
-  createRoom: (roomData: Partial<RoomData>) => void;
-  toggleSpeaking: (speakerId: string) => void;
+  fetchRooms: () => Promise<void>;
+  joinRoom: (roomId: string) => Promise<void>;
+  leaveRoom: () => Promise<void>;
+  createRoom: (roomData: Partial<RoomData>) => Promise<void>;
+  toggleSpeaking: (speakerId: string) => Promise<void>;
+  isLoading: boolean;
 }
-
-// Mock data
-const mockSpeakers: Speaker[] = [
-  {
-    id: 'speaker-1',
-    name: 'Alex Johnson',
-    avatar: '/placeholder.svg',
-    isModerator: true,
-    isSpeaking: false,
-  },
-  {
-    id: 'speaker-2',
-    name: 'Sofia Chen',
-    avatar: '/placeholder.svg',
-    isModerator: false,
-    isSpeaking: false,
-  },
-  {
-    id: 'speaker-3',
-    name: 'Marcus Lee',
-    avatar: '/placeholder.svg',
-    isModerator: false,
-    isSpeaking: false,
-  },
-  {
-    id: 'speaker-4',
-    name: 'Emma Wilson',
-    avatar: '/placeholder.svg',
-    isModerator: false,
-    isSpeaking: false,
-  },
-];
-
-const mockRooms: RoomData[] = [
-  {
-    id: 'room-1',
-    name: 'Tech Talk: AI Revolution',
-    description: 'Join us as we discuss the latest in AI technology and its impact on society.',
-    participants: 423,
-    topic: 'Technology',
-    speakers: mockSpeakers.slice(0, 3),
-    coverImage: '/placeholder.svg',
-    color: 'from-purple-500 to-pink-500',
-    isLive: true,
-  },
-  {
-    id: 'room-2',
-    name: 'Music Production Tips',
-    description: 'Professional producers share their secrets for creating chart-topping hits.',
-    participants: 187,
-    topic: 'Music',
-    speakers: mockSpeakers.slice(1, 4),
-    coverImage: '/placeholder.svg',
-    color: 'from-blue-500 to-teal-400',
-    isLive: true,
-  },
-  {
-    id: 'room-3',
-    name: 'Startup Founders Hangout',
-    description: 'Networking and sharing experiences in the startup ecosystem.',
-    participants: 256,
-    topic: 'Business',
-    speakers: [mockSpeakers[0], mockSpeakers[3]],
-    coverImage: '/placeholder.svg',
-    color: 'from-yellow-400 to-orange-500',
-    isLive: true,
-  },
-  {
-    id: 'room-4',
-    name: 'Mindfulness Meditation',
-    description: 'Guided meditation session for beginners and advanced practitioners.',
-    participants: 98,
-    topic: 'Wellness',
-    speakers: [mockSpeakers[2]],
-    coverImage: '/placeholder.svg',
-    color: 'from-green-400 to-emerald-500',
-    isLive: true,
-  },
-  {
-    id: 'room-5',
-    name: 'Book Club: Sci-Fi Classics',
-    description: 'Discussing our favorite science fiction novels and their impact on the genre.',
-    participants: 132,
-    topic: 'Books',
-    speakers: mockSpeakers.slice(0, 2),
-    coverImage: '/placeholder.svg',
-    color: 'from-indigo-500 to-purple-600',
-    isLive: false,
-  },
-  {
-    id: 'room-6',
-    name: 'Travel Stories: Asia Edition',
-    description: 'Sharing experiences and tips from travels across Asia.',
-    participants: 75,
-    topic: 'Travel',
-    speakers: [mockSpeakers[1], mockSpeakers[3]],
-    coverImage: '/placeholder.svg',
-    color: 'from-red-500 to-pink-600',
-    isLive: false,
-  },
-];
 
 // Create context
 const RoomContext = createContext<RoomContextType>({
   rooms: [],
   currentRoom: null,
-  joinRoom: () => {},
-  leaveRoom: () => {},
-  createRoom: () => {},
-  toggleSpeaking: () => {},
+  fetchRooms: async () => {},
+  joinRoom: async () => {},
+  leaveRoom: async () => {},
+  createRoom: async () => {},
+  toggleSpeaking: async () => {},
+  isLoading: false,
 });
 
 export const useRoom = () => useContext(RoomContext);
 
 export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const [rooms, setRooms] = useState<RoomData[]>(mockRooms);
+  const [rooms, setRooms] = useState<RoomData[]>([]);
   const [currentRoom, setCurrentRoom] = useState<RoomData | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { currentUser, profile } = useUser();
 
-  // Initialize rooms with mock data
+  // Setup real-time room subscriptions
   useEffect(() => {
-    // Simulate room data fetching
-    setTimeout(() => {
-      setRooms(mockRooms);
-    }, 500);
+    const roomSubscription = supabase
+      .channel('public:rooms')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'rooms' 
+      }, (payload) => {
+        fetchRooms();
+      })
+      .subscribe();
+
+    // Initialize room data
+    fetchRooms();
+
+    return () => {
+      supabase.removeChannel(roomSubscription);
+    };
   }, []);
 
-  const joinRoom = useCallback((roomId: string) => {
-    const room = rooms.find(r => r.id === roomId);
-    if (room) {
+  // Fetch room data from Supabase
+  const fetchRooms = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch rooms
+      const { data: roomsData, error: roomsError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (roomsError) throw roomsError;
+
+      // For each room, fetch the participants
+      const roomsWithDetails = await Promise.all(
+        roomsData.map(async (room) => {
+          // Get participants
+          const { data: participants, error: participantsError } = await supabase
+            .from('room_participants')
+            .select('*, user_profiles(id, username, name, avatar_url)')
+            .eq('room_id', room.id);
+
+          if (participantsError) {
+            console.error('Error fetching participants:', participantsError);
+            return null;
+          }
+
+          // Format speakers from participants
+          const speakers = participants.map((participant) => {
+            const profile = participant.user_profiles;
+            return {
+              id: profile.id,
+              name: profile.name || profile.username,
+              username: profile.username,
+              avatar: profile.avatar_url || '/placeholder.svg',
+              isModerator: participant.is_moderator,
+              isSpeaking: participant.is_speaking,
+            };
+          });
+
+          // Generate a gradient color based on the room name
+          const colors = [
+            'from-purple-500 to-pink-500',
+            'from-blue-500 to-teal-400',
+            'from-yellow-400 to-orange-500',
+            'from-green-400 to-emerald-500',
+            'from-indigo-500 to-purple-600',
+            'from-red-500 to-pink-600',
+          ];
+          
+          const colorIndex = room.id.charCodeAt(0) % colors.length;
+
+          return {
+            id: room.id,
+            name: room.name,
+            description: 'Join the conversation',
+            participants: participants.length,
+            topic: 'General',
+            speakers,
+            coverImage: '/placeholder.svg',
+            color: colors[colorIndex],
+            isLive: true,
+            created_by: room.created_by,
+            created_at: room.created_at,
+          };
+        })
+      );
+
+      const validRooms = roomsWithDetails.filter((room): room is RoomData => room !== null);
+      setRooms(validRooms);
+
+      // If we're in a room, update the current room data
+      if (currentRoom) {
+        const updatedRoom = validRooms.find(r => r.id === currentRoom.id);
+        if (updatedRoom) {
+          setCurrentRoom(updatedRoom);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
+      toast.error('Failed to load rooms');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const joinRoom = useCallback(async (roomId: string) => {
+    if (!currentUser) {
+      toast.error('You must be logged in to join a room');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Find the room in our existing data
+      const room = rooms.find(r => r.id === roomId);
+      if (!room) {
+        toast.error('Room not found');
+        return;
+      }
+
+      // Check if user is already a participant
+      const { data: existingParticipant, error: checkError } = await supabase
+        .from('room_participants')
+        .select('*')
+        .eq('room_id', roomId)
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      // If not already a participant, add them
+      if (!existingParticipant) {
+        const { error: joinError } = await supabase
+          .from('room_participants')
+          .insert({
+            room_id: roomId,
+            user_id: currentUser.id,
+            is_moderator: false
+          });
+
+        if (joinError) throw joinError;
+      }
+
+      // Set this as the current room
       setCurrentRoom(room);
       toast(`Joined ${room.name}`);
-    }
-  }, [rooms]);
 
-  const leaveRoom = useCallback(() => {
-    if (currentRoom) {
+      // Refresh rooms data to get latest participants
+      fetchRooms();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to join room');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [rooms, currentUser]);
+
+  const leaveRoom = useCallback(async () => {
+    if (!currentUser || !currentRoom) return;
+
+    try {
+      const { error } = await supabase
+        .from('room_participants')
+        .delete()
+        .eq('room_id', currentRoom.id)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
       toast(`Left ${currentRoom.name}`);
       setCurrentRoom(null);
-    }
-  }, [currentRoom]);
-
-  const createRoom = useCallback((roomData: Partial<RoomData>) => {
-    const newRoom: RoomData = {
-      id: `room-${Date.now()}`,
-      name: roomData.name || 'New Room',
-      description: roomData.description || 'No description provided',
-      participants: 1,
-      topic: roomData.topic || 'General',
-      speakers: roomData.speakers || [mockSpeakers[0]],
-      coverImage: roomData.coverImage || '/placeholder.svg',
-      color: roomData.color || 'from-purple-500 to-pink-500',
-      isLive: true,
-    };
-
-    setRooms(prev => [newRoom, ...prev]);
-    setCurrentRoom(newRoom);
-    toast(`Created room: ${newRoom.name}`);
-  }, []);
-
-  const toggleSpeaking = useCallback((speakerId: string) => {
-    if (!currentRoom) return;
-
-    setCurrentRoom(prev => {
-      if (!prev) return null;
       
-      return {
-        ...prev,
-        speakers: prev.speakers.map(speaker => 
-          speaker.id === speakerId 
-            ? { ...speaker, isSpeaking: !speaker.isSpeaking } 
-            : speaker
-        )
-      };
-    });
-  }, [currentRoom]);
+      // Refresh rooms data
+      fetchRooms();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to leave room');
+    }
+  }, [currentRoom, currentUser]);
+
+  const createRoom = useCallback(async (roomData: Partial<RoomData>) => {
+    if (!currentUser) {
+      toast.error('You must be logged in to create a room');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // Insert the new room
+      const { data: newRoom, error: roomError } = await supabase
+        .from('rooms')
+        .insert({
+          name: roomData.name || 'New Room',
+          created_by: currentUser.id,
+        })
+        .select()
+        .single();
+
+      if (roomError) throw roomError;
+
+      // Add the creator as a moderator
+      const { error: participantError } = await supabase
+        .from('room_participants')
+        .insert({
+          room_id: newRoom.id,
+          user_id: currentUser.id,
+          is_moderator: true
+        });
+
+      if (participantError) throw participantError;
+
+      toast(`Created room: ${newRoom.name}`);
+      
+      // Refresh rooms and join the new room
+      await fetchRooms();
+      await joinRoom(newRoom.id);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to create room');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentUser, fetchRooms, joinRoom]);
+
+  const toggleSpeaking = useCallback(async (speakerId: string) => {
+    if (!currentUser || !currentRoom) return;
+
+    try {
+      // Get the participant to toggle
+      const { data: participant, error: fetchError } = await supabase
+        .from('room_participants')
+        .select('*')
+        .eq('room_id', currentRoom.id)
+        .eq('user_id', speakerId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Update the speaking status
+      const { error: updateError } = await supabase
+        .from('room_participants')
+        .update({ is_speaking: !participant.is_speaking })
+        .eq('room_id', currentRoom.id)
+        .eq('user_id', speakerId);
+
+      if (updateError) throw updateError;
+
+      // Refresh room data
+      fetchRooms();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update speaking status');
+    }
+  }, [currentRoom, currentUser, fetchRooms]);
 
   return (
     <RoomContext.Provider value={{
       rooms,
       currentRoom,
+      fetchRooms,
       joinRoom,
       leaveRoom,
       createRoom,
       toggleSpeaking,
+      isLoading,
     }}>
       {children}
     </RoomContext.Provider>

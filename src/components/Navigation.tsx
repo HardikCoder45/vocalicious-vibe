@@ -1,17 +1,28 @@
 
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
-import { Home, Users, Search, UserCircle, Settings, LogOut } from "lucide-react";
+import { Home, Users, Search, UserCircle, Settings, LogOut, LogIn } from "lucide-react";
 import ThemeSelector from './ThemeSelector';
 import { useUser } from '@/context/UserContext';
+import Avatar from './Avatar';
 
 const Navigation: React.FC = () => {
   const location = useLocation();
-  const { currentUser, logout } = useUser();
+  const { currentUser, profile, logout, isAuthenticated } = useUser();
+  const navigate = useNavigate();
   
   const isActive = (path: string) => {
     return location.pathname === path;
+  };
+  
+  const handleLogout = async () => {
+    await logout();
+    navigate('/auth');
+  };
+
+  const handleLogin = () => {
+    navigate('/auth');
   };
   
   const navItems = [
@@ -34,13 +45,20 @@ const Navigation: React.FC = () => {
       path: '/profile',
       label: 'Profile',
       icon: UserCircle,
+      protected: true,
     },
     {
       path: '/settings',
       label: 'Settings',
       icon: Settings,
+      protected: true,
     },
   ];
+  
+  // Filter out protected routes if not authenticated
+  const filteredNavItems = navItems.filter(item => 
+    !item.protected || isAuthenticated
+  );
   
   return (
     <nav className="fixed bottom-0 left-0 w-full border-t bg-background md:relative md:w-auto md:border-r md:border-t-0 md:h-screen z-20">
@@ -50,7 +68,7 @@ const Navigation: React.FC = () => {
         </div>
         
         <div className="flex justify-around w-full md:flex-col md:gap-2">
-          {navItems.map((item) => (
+          {filteredNavItems.map((item) => (
             <Link key={item.path} to={item.path}>
               <Button
                 variant={isActive(item.path) ? "default" : "ghost"}
@@ -77,19 +95,49 @@ const Navigation: React.FC = () => {
         <div className="hidden md:flex md:flex-col md:gap-2 md:mt-auto">
           <ThemeSelector />
           
-          {currentUser && (
+          {isAuthenticated ? (
+            <div className="flex flex-col items-center gap-2 pt-4 border-t">
+              <Link to="/profile" className="w-full">
+                <div className="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors">
+                  <Avatar 
+                    src={profile?.avatar_url || '/placeholder.svg'} 
+                    alt={profile?.name || profile?.username || 'User'} 
+                    size="sm" 
+                  />
+                  <span className="text-sm font-medium truncate max-w-[120px]">
+                    {profile?.name || profile?.username || 'User'}
+                  </span>
+                </div>
+              </Link>
+              
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLogout}
+                className="relative group"
+              >
+                <LogOut className="h-5 w-5" />
+                <span className="sr-only">Logout</span>
+                
+                {/* Desktop tooltip */}
+                <div className="hidden md:block absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
+                  Logout
+                </div>
+              </Button>
+            </div>
+          ) : (
             <Button
               variant="ghost"
               size="icon"
-              onClick={logout}
+              onClick={handleLogin}
               className="relative group"
             >
-              <LogOut className="h-5 w-5" />
-              <span className="sr-only">Logout</span>
+              <LogIn className="h-5 w-5" />
+              <span className="sr-only">Login</span>
               
               {/* Desktop tooltip */}
               <div className="hidden md:block absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
-                Logout
+                Login
               </div>
             </Button>
           )}

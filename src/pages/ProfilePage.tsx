@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
-import { User, useUser } from '@/context/UserContext';
+import React, { useState, useRef } from 'react';
+import { useUser } from '@/context/UserContext';
 import Avatar from '@/components/Avatar';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Edit2, Save, Users, Mic, BookMarked, Calendar } from "lucide-react";
+import { Edit2, Save, Users, Mic, BookMarked, Calendar, Camera } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -13,30 +13,47 @@ import RoomCard from '@/components/RoomCard';
 import { useRoom } from '@/context/RoomContext';
 import { useNavigate } from 'react-router-dom';
 import ParticleBackground from '@/components/ParticleBackground';
+import { toast } from "sonner";
 
 const ProfilePage = () => {
-  const { currentUser, updateProfile } = useUser();
+  const { profile, updateProfile, uploadAvatar, isLoading } = useUser();
   const { rooms, joinRoom } = useRoom();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<Partial<User> | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    username: '',
+    bio: '',
+  });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
   
   const handleEdit = () => {
-    setFormData(currentUser || null);
+    if (profile) {
+      setFormData({
+        name: profile.name || '',
+        username: profile.username,
+        bio: profile.bio || '',
+      });
+    }
     setIsEditing(true);
   };
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    if (!formData) return;
-    
     const { name, value } = e.target;
-    setFormData(prev => prev ? { ...prev, [name]: value } : null);
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
   
   const handleSave = async () => {
-    if (formData) {
-      await updateProfile(formData);
+    try {
+      await updateProfile({
+        name: formData.name,
+        username: formData.username,
+        bio: formData.bio,
+      });
       setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
     }
   };
   
@@ -48,13 +65,45 @@ const ProfilePage = () => {
     joinRoom(roomId);
     navigate(`/room/${roomId}`);
   };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    // Limit file size to 5MB
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const avatarUrl = await uploadAvatar(file);
+      await updateProfile({ avatar_url: avatarUrl });
+      toast.success('Profile picture updated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload avatar');
+    } finally {
+      setUploading(false);
+    }
+  };
   
   // Filter rooms for "my rooms" tab - rooms where the user is a speaker
   const myRooms = rooms.filter(room => 
-    room.speakers.some(speaker => speaker.id === currentUser?.id)
+    room.speakers.some(speaker => speaker.id === profile?.id)
   );
   
-  if (!currentUser) {
+  if (isLoading || !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-center">
@@ -71,37 +120,50 @@ const ProfilePage = () => {
       <ParticleBackground particleCount={30} />
       
       <header className="px-4 pt-8 pb-6 md:px-8 text-center animate-fade-in relative overflow-hidden">
-        <div className="mb-6">
+        <div className="mb-6 relative inline-block group">
           <Avatar 
-            src={currentUser.avatar} 
-            alt={currentUser.name} 
+            src={profile.avatar_url || '/placeholder.svg'} 
+            alt={profile.name || profile.username} 
             size="xl" 
           />
+          <Button
+            size="icon"
+            variant="secondary"
+            className="absolute bottom-0 right-0 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={handleAvatarClick}
+            disabled={uploading}
+          >
+            <Camera className="h-4 w-4" />
+          </Button>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            accept="image/*"
+            onChange={handleFileChange}
+          />
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-background/50 rounded-full">
+              <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full"></div>
+            </div>
+          )}
         </div>
         
         {!isEditing ? (
           <div>
-            <h1 className="text-2xl font-bold mb-1">{currentUser.name}</h1>
-            <p className="text-muted-foreground mb-2">@{currentUser.username}</p>
-            <p className="mb-4 max-w-md mx-auto">{currentUser.bio}</p>
+            <h1 className="text-2xl font-bold mb-1">{profile.name || profile.username}</h1>
+            <p className="text-muted-foreground mb-2">@{profile.username}</p>
+            <p className="mb-4 max-w-md mx-auto">{profile.bio || 'No bio yet'}</p>
             
             <div className="flex justify-center gap-6 mb-4">
               <div className="text-center">
-                <p className="font-semibold">{currentUser.followers}</p>
+                <p className="font-semibold">0</p>
                 <p className="text-sm text-muted-foreground">Followers</p>
               </div>
               <div className="text-center">
-                <p className="font-semibold">{currentUser.following}</p>
+                <p className="font-semibold">0</p>
                 <p className="text-sm text-muted-foreground">Following</p>
               </div>
-            </div>
-            
-            <div className="flex flex-wrap justify-center gap-2 mb-4">
-              {currentUser.interests.map(interest => (
-                <Badge key={interest} variant="secondary">
-                  {interest}
-                </Badge>
-              ))}
             </div>
             
             <Button 
@@ -120,14 +182,14 @@ const ProfilePage = () => {
               <div>
                 <Input
                   name="name"
-                  value={formData?.name || ''}
+                  value={formData.name}
                   onChange={handleChange}
                   placeholder="Name"
                   className="mb-2"
                 />
                 <Input
                   name="username"
-                  value={formData?.username || ''}
+                  value={formData.username}
                   onChange={handleChange}
                   placeholder="Username"
                 />
@@ -135,7 +197,7 @@ const ProfilePage = () => {
               
               <Textarea
                 name="bio"
-                value={formData?.bio || ''}
+                value={formData.bio}
                 onChange={handleChange}
                 placeholder="Bio"
                 rows={3}

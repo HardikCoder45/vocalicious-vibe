@@ -4,29 +4,43 @@ import { Button } from "@/components/ui/button";
 import RoomCard from '@/components/RoomCard';
 import { Plus, Mic, Flame, Clock } from "lucide-react";
 import { useRoom } from '@/context/RoomContext';
+import { useUser } from '@/context/UserContext';
 import { useNavigate } from 'react-router-dom';
 import ParticleBackground from '@/components/ParticleBackground';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
 
 const Index = () => {
-  const { rooms, joinRoom } = useRoom();
+  const { rooms, joinRoom, isLoading: roomsLoading, fetchRooms } = useRoom();
+  const { isAuthenticated } = useUser();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading
-    const timer = setTimeout(() => setIsLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
+    // Load rooms data
+    const loadRooms = async () => {
+      await fetchRooms();
+      // Short delay to prevent flashing
+      setTimeout(() => setIsLoading(false), 300);
+    };
+    
+    loadRooms();
+  }, [fetchRooms]);
 
   const handleCreateRoom = () => {
-    navigate('/create-room');
+    if (isAuthenticated) {
+      navigate('/create-room');
+    } else {
+      navigate('/auth');
+    }
   };
 
   const handleJoinRoom = (roomId: string) => {
-    joinRoom(roomId);
-    navigate(`/room/${roomId}`);
+    if (isAuthenticated) {
+      joinRoom(roomId);
+      navigate(`/room/${roomId}`);
+    } else {
+      navigate('/auth');
+    }
   };
 
   const liveRooms = rooms.filter(room => room.isLive);
@@ -79,7 +93,7 @@ const Index = () => {
               ))}
             </div>
             
-            {liveRooms.length === 0 && !isLoading && (
+            {liveRooms.length === 0 && !isLoading && !roomsLoading && (
               <div className="flex flex-col items-center py-12 text-center text-muted-foreground animate-fade-in">
                 <Mic className="h-16 w-16 mb-4 opacity-20" />
                 <h3 className="text-xl font-medium mb-2">No live rooms</h3>
@@ -105,7 +119,7 @@ const Index = () => {
               ))}
             </div>
             
-            {upcomingRooms.length === 0 && !isLoading && (
+            {upcomingRooms.length === 0 && !isLoading && !roomsLoading && (
               <div className="flex flex-col items-center py-12 text-center text-muted-foreground animate-fade-in">
                 <Clock className="h-16 w-16 mb-4 opacity-20" />
                 <h3 className="text-xl font-medium mb-2">No upcoming rooms</h3>
@@ -116,7 +130,7 @@ const Index = () => {
           </TabsContent>
         </Tabs>
         
-        {isLoading && (
+        {(isLoading || roomsLoading) && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="room-card animate-pulse h-64 bg-muted"></div>

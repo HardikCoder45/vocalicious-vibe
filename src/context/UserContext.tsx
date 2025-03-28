@@ -1,144 +1,213 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from "sonner";
+import { User as SupabaseUser, Session } from '@supabase/supabase-js';
+import { supabase } from "@/integrations/supabase/client";
 
-export interface User {
+export interface Profile {
   id: string;
-  name: string;
   username: string;
-  avatar: string;
-  bio: string;
-  followers: number;
-  following: number;
-  interests: string[];
+  name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  created_at: string;
 }
 
 interface UserContextType {
-  currentUser: User | null;
+  currentUser: SupabaseUser | null;
+  profile: Profile | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
-  register: (username: string, email: string, password: string) => Promise<void>;
-  updateProfile: (userData: Partial<User>) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+  register: (email: string, password: string) => Promise<void>;
+  updateProfile: (userData: Partial<Profile>) => Promise<void>;
+  uploadAvatar: (file: File) => Promise<string>;
 }
-
-// Mock user data
-const mockUser: User = {
-  id: 'user-1',
-  name: 'Jamie Smith',
-  username: 'jamie_speaks',
-  avatar: '/placeholder.svg',
-  bio: 'Voice enthusiast | Tech lover | Coffee addict',
-  followers: 245,
-  following: 187,
-  interests: ['Technology', 'Music', 'Design', 'Books'],
-};
 
 const UserContext = createContext<UserContextType>({
   currentUser: null,
-  isLoading: false,
+  profile: null,
+  isLoading: true,
   isAuthenticated: false,
   login: async () => {},
-  logout: () => {},
+  logout: async () => {},
   register: async () => {},
   updateProfile: async () => {},
+  uploadAvatar: async () => { return ''; },
 });
 
 export const useUser = () => useContext(UserContext);
 
 export const UserProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Initialize user from local storage
   useEffect(() => {
-    const storedUser = localStorage.getItem('vibe-user');
-    
-    // Simulate loading
-    setTimeout(() => {
-      if (storedUser) {
-        setCurrentUser(JSON.parse(storedUser));
-        setIsAuthenticated(true);
-      } else {
-        // Auto-login with mock user for demo purposes
-        setCurrentUser(mockUser);
-        setIsAuthenticated(true);
-        localStorage.setItem('vibe-user', JSON.stringify(mockUser));
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setCurrentUser(session?.user ?? null);
+        setIsAuthenticated(!!session);
+        
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        } else {
+          setProfile(null);
+        }
       }
+    );
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setCurrentUser(session?.user ?? null);
+      setIsAuthenticated(!!session);
+      
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      }
+      
       setIsLoading(false);
-    }, 1000);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (username: string, password: string) => {
-    setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setCurrentUser(mockUser);
-    setIsAuthenticated(true);
-    localStorage.setItem('vibe-user', JSON.stringify(mockUser));
-    setIsLoading(false);
-    toast.success('Logged in successfully');
-  };
-
-  const logout = () => {
-    setCurrentUser(null);
-    setIsAuthenticated(false);
-    localStorage.removeItem('vibe-user');
-    toast('Logged out successfully');
-  };
-
-  const register = async (username: string, email: string, password: string) => {
-    setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const newUser = {
-      ...mockUser,
-      username,
-      name: username.split('_').join(' '),
-    };
-    
-    setCurrentUser(newUser);
-    setIsAuthenticated(true);
-    localStorage.setItem('vibe-user', JSON.stringify(newUser));
-    setIsLoading(false);
-    toast.success('Registered successfully');
-  };
-
-  const updateProfile = async (userData: Partial<User>) => {
-    setIsLoading(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    if (currentUser) {
-      const updatedUser = {
-        ...currentUser,
-        ...userData,
-      };
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
       
-      setCurrentUser(updatedUser);
-      localStorage.setItem('vibe-user', JSON.stringify(updatedUser));
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+      
+      setProfile(data);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    setIsLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+      
+      toast.success('Logged in successfully');
+      return data;
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to login');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const register = async (email: string, password: string) => {
+    setIsLoading(true);
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: window.location.origin,
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success('Registration successful!');
+      return data;
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to register');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      toast('Logged out successfully');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to logout');
+    }
+  };
+
+  const uploadAvatar = async (file: File): Promise<string> => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${currentUser.id}/${Math.random().toString(36).substring(2)}.${fileExt}`;
+    
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, { upsert: true });
+    
+    if (uploadError) {
+      throw uploadError;
     }
     
-    setIsLoading(false);
-    toast.success('Profile updated');
+    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+    
+    return data.publicUrl;
+  };
+
+  const updateProfile = async (userData: Partial<Profile>) => {
+    if (!currentUser) throw new Error('User not authenticated');
+    
+    setIsLoading(true);
+    
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .update(userData)
+        .eq('id', currentUser.id);
+      
+      if (error) throw error;
+      
+      // Update local profile state
+      setProfile(prev => prev ? { ...prev, ...userData } : null);
+      
+      toast.success('Profile updated');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update profile');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <UserContext.Provider value={{
       currentUser,
+      profile,
       isLoading,
       isAuthenticated,
       login,
       logout,
       register,
       updateProfile,
+      uploadAvatar,
     }}>
       {children}
     </UserContext.Provider>

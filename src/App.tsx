@@ -3,11 +3,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { RoomProvider } from "@/context/RoomContext";
 import { AudioProvider } from "@/context/AudioContext";
-import { UserProvider } from "@/context/UserContext";
+import { UserProvider, useUser } from "@/context/UserContext";
 import Navigation from "@/components/Navigation";
 
 // Pages
@@ -19,8 +19,29 @@ import ProfilePage from "./pages/ProfilePage";
 import PeoplePage from "./pages/PeoplePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
+import AuthPage from "./pages/AuthPage";
+import { Suspense, lazy } from "react";
 
 const queryClient = new QueryClient();
+
+// Protected route wrapper
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useUser();
+  
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+  
+  return <>{children}</>;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -35,16 +56,39 @@ const App = () => (
                 <div className="flex min-h-screen">
                   <Navigation />
                   <div className="flex-1 min-h-screen relative">
-                    <Routes>
-                      <Route path="/" element={<Index />} />
-                      <Route path="/room/:roomId" element={<RoomPage />} />
-                      <Route path="/create-room" element={<CreateRoomPage />} />
-                      <Route path="/explore" element={<ExplorePage />} />
-                      <Route path="/profile" element={<ProfilePage />} />
-                      <Route path="/people" element={<PeoplePage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="*" element={<NotFound />} />
-                    </Routes>
+                    <Suspense fallback={
+                      <div className="flex min-h-screen items-center justify-center">
+                        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
+                      </div>
+                    }>
+                      <Routes>
+                        <Route path="/auth" element={<AuthPage />} />
+                        <Route path="/" element={<Index />} />
+                        <Route path="/room/:roomId" element={
+                          <ProtectedRoute>
+                            <RoomPage />
+                          </ProtectedRoute>
+                        } />
+                        <Route path="/create-room" element={
+                          <ProtectedRoute>
+                            <CreateRoomPage />
+                          </ProtectedRoute>
+                        } />
+                        <Route path="/explore" element={<ExplorePage />} />
+                        <Route path="/profile" element={
+                          <ProtectedRoute>
+                            <ProfilePage />
+                          </ProtectedRoute>
+                        } />
+                        <Route path="/people" element={<PeoplePage />} />
+                        <Route path="/settings" element={
+                          <ProtectedRoute>
+                            <SettingsPage />
+                          </ProtectedRoute>
+                        } />
+                        <Route path="*" element={<NotFound />} />
+                      </Routes>
+                    </Suspense>
                   </div>
                 </div>
               </BrowserRouter>

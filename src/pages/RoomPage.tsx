@@ -6,8 +6,9 @@ import { ArrowLeft, Plus, MoreHorizontal, Share2, Heart, Mic } from "lucide-reac
 import Avatar from '@/components/Avatar';
 import MicrophoneButton from '@/components/MicrophoneButton';
 import WaveformVisualizer from '@/components/WaveformVisualizer';
-import { useRoom, Speaker } from '@/context/RoomContext';
+import { useRoom } from '@/context/RoomContext';
 import { useAudio } from '@/context/AudioContext';
+import { useUser } from '@/context/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -16,25 +17,35 @@ import ParticleBackground from '@/components/ParticleBackground';
 const RoomPage = () => {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { rooms, currentRoom, joinRoom, leaveRoom, toggleSpeaking } = useRoom();
+  const { rooms, currentRoom, joinRoom, leaveRoom, toggleSpeaking, isLoading: roomsLoading } = useRoom();
+  const { isAuthenticated } = useUser();
   const { isListening, startListening, stopListening } = useAudio();
   const [isLoading, setIsLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   
   useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/auth');
+      return;
+    }
+
     if (roomId) {
-      joinRoom(roomId);
-      startListening();
+      const loadRoom = async () => {
+        await joinRoom(roomId);
+        startListening();
+        
+        // Simulate loading
+        setTimeout(() => setIsLoading(false), 800);
+      };
       
-      // Simulate loading
-      const timer = setTimeout(() => setIsLoading(false), 800);
+      loadRoom();
+      
       return () => {
-        clearTimeout(timer);
         leaveRoom();
         stopListening();
       };
     }
-  }, [roomId, joinRoom, leaveRoom, startListening, stopListening]);
+  }, [roomId, joinRoom, leaveRoom, startListening, stopListening, isAuthenticated, navigate]);
   
   const handleBack = () => {
     leaveRoom();
@@ -56,7 +67,7 @@ const RoomPage = () => {
     toggleSpeaking(speakerId);
   };
   
-  if (!currentRoom && !isLoading) {
+  if (!currentRoom && !isLoading && !roomsLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
         <h2 className="text-2xl font-bold mb-4">Room not found</h2>
