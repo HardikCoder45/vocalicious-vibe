@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Home, Users, Search, UserCircle, Settings, LogOut, LogIn } from "lucide-react";
@@ -21,13 +21,15 @@ const Navigation: React.FC = () => {
     try {
       await logout();
       navigate('/auth');
+      toast.success('Successfully logged out');
     } catch (error) {
+      console.error('Logout error:', error);
       toast.error('Failed to logout');
     }
   };
 
   const handleLogin = () => {
-    navigate('/auth');
+    navigate('/auth', { state: { from: location.pathname } });
   };
   
   const navItems = [
@@ -80,7 +82,7 @@ const Navigation: React.FC = () => {
               onClick={(e) => {
                 if (item.protected && !isAuthenticated) {
                   e.preventDefault();
-                  navigate('/auth');
+                  navigate('/auth', { state: { from: item.path } });
                   toast('Please login to access this feature');
                 }
               }}
@@ -114,7 +116,7 @@ const Navigation: React.FC = () => {
             <div className="flex justify-center p-2">
               <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>
             </div>
-          ) : isAuthenticated ? (
+          ) : isAuthenticated && profile ? (
             <div className="flex flex-col items-center gap-2 pt-4 border-t">
               <Link to="/profile" className="w-full">
                 <div className="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors">
@@ -164,7 +166,7 @@ const Navigation: React.FC = () => {
         
         {/* Mobile auth buttons */}
         <div className="fixed top-2 right-2 md:hidden">
-          {isAuthenticated ? (
+          {isAuthenticated && profile ? (
             <Link to="/profile">
               <Avatar 
                 src={profile?.avatar_url || '/placeholder.svg'} 

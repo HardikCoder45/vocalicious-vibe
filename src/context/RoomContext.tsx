@@ -61,23 +61,38 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
 
   // Setup real-time room subscriptions
   useEffect(() => {
-    const roomSubscription = supabase
-      .channel('public:rooms')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'rooms' 
-      }, (payload) => {
-        fetchRooms();
-      })
-      .subscribe();
+    const setupRealtime = async () => {
+      // Initial fetch
+      try {
+        await fetchRooms();
+      } catch (error) {
+        console.error("Initial room fetch failed:", error);
+      }
 
-    // Initialize room data
-    fetchRooms();
+      // Subscribe to changes
+      const roomSubscription = supabase
+        .channel('public:rooms')
+        .on('postgres_changes', { 
+          event: '*', 
+          schema: 'public', 
+          table: 'rooms' 
+        }, () => {
+          fetchRooms().catch(err => {
+            console.error("Failed to fetch rooms after change:", err);
+          });
+        })
+        .subscribe((status) => {
+          if (status !== 'SUBSCRIBED') {
+            console.error("Failed to subscribe to room changes:", status);
+          }
+        });
 
-    return () => {
-      supabase.removeChannel(roomSubscription);
+      return () => {
+        supabase.removeChannel(roomSubscription);
+      };
     };
+
+    setupRealtime();
   }, []);
 
   // Fetch room data from Supabase
@@ -96,69 +111,78 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       // For each room, fetch the participants
       const roomsWithDetails = await Promise.all(
         roomsData.map(async (room) => {
-          // Get participants
-          const { data: participants, error: participantsError } = await supabase
-            .from('room_participants')
-            .select('*, user_id')
-            .eq('room_id', room.id);
+          try {
+            // Get participants
+            const { data: participants, error: participantsError } = await supabase
+              .from('room_participants')
+              .select('*, user_id')
+              .eq('room_id', room.id);
 
-          if (participantsError) {
-            console.error('Error fetching participants:', participantsError);
-            return null;
-          }
-
-          // Fetch user profiles for each participant
-          const speakersPromises = participants.map(async (participant) => {
-            const { data: userProfile, error: profileError } = await supabase
-              .from('user_profiles')
-              .select('*')
-              .eq('id', participant.user_id)
-              .single();
-
-            if (profileError) {
-              console.error('Error fetching user profile:', profileError);
+            if (participantsError) {
+              console.error('Error fetching participants:', participantsError);
               return null;
             }
 
-            // Fix: Use username instead of name since 'name' doesn't exist in the profile type
+            // Fetch user profiles for each participant
+            const speakersPromises = participants.map(async (participant) => {
+              try {
+                const { data: userProfile, error: profileError } = await supabase
+                  .from('user_profiles')
+                  .select('*')
+                  .eq('id', participant.user_id)
+                  .single();
+
+                if (profileError) {
+                  console.error('Error fetching user profile:', profileError);
+                  return null;
+                }
+
+                return {
+                  id: userProfile.id,
+                  name: userProfile.username, // Use username since name doesn't exist in the profile
+                  username: userProfile.username,
+                  avatar: userProfile.avatar_url || '/placeholder.svg',
+                  isModerator: participant.is_moderator,
+                  isSpeaking: participant.is_speaking,
+                };
+              } catch (error) {
+                console.error('Error processing participant:', error);
+                return null;
+              }
+            });
+
+            const speakersData = await Promise.all(speakersPromises);
+            const speakers = speakersData.filter((speaker): speaker is Speaker => speaker !== null);
+
+            // Generate a gradient color based on the room name
+            const colors = [
+              'from-purple-500 to-pink-500',
+              'from-blue-500 to-teal-400',
+              'from-yellow-400 to-orange-500',
+              'from-green-400 to-emerald-500',
+              'from-indigo-500 to-purple-600',
+              'from-red-500 to-pink-600',
+            ];
+            
+            const colorIndex = room.id.charCodeAt(0) % colors.length;
+
             return {
-              id: userProfile.id,
-              name: userProfile.username, // Use username as name since name property doesn't exist
-              username: userProfile.username,
-              avatar: userProfile.avatar_url || '/placeholder.svg',
-              isModerator: participant.is_moderator,
-              isSpeaking: participant.is_speaking,
+              id: room.id,
+              name: room.name,
+              description: room.description || 'Join the conversation',
+              participants: participants.length,
+              topic: room.topic || 'General',
+              speakers,
+              coverImage: '/placeholder.svg',
+              color: colors[colorIndex],
+              isLive: true,
+              created_by: room.created_by,
+              created_at: room.created_at,
             };
-          });
-
-          const speakersData = await Promise.all(speakersPromises);
-          const speakers = speakersData.filter((speaker): speaker is Speaker => speaker !== null);
-
-          // Generate a gradient color based on the room name
-          const colors = [
-            'from-purple-500 to-pink-500',
-            'from-blue-500 to-teal-400',
-            'from-yellow-400 to-orange-500',
-            'from-green-400 to-emerald-500',
-            'from-indigo-500 to-purple-600',
-            'from-red-500 to-pink-600',
-          ];
-          
-          const colorIndex = room.id.charCodeAt(0) % colors.length;
-
-          return {
-            id: room.id,
-            name: room.name,
-            description: 'Join the conversation',
-            participants: participants.length,
-            topic: 'General',
-            speakers,
-            coverImage: '/placeholder.svg',
-            color: colors[colorIndex],
-            isLive: true,
-            created_by: room.created_by,
-            created_at: room.created_at,
-          };
+          } catch (error) {
+            console.error('Error processing room:', error);
+            return null;
+          }
         })
       );
 
@@ -191,7 +215,46 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       // Find the room in our existing data
       const room = rooms.find(r => r.id === roomId);
       if (!room) {
-        toast.error('Room not found');
+        // If room not found in cache, try to fetch it directly
+        const { data: roomData, error: roomError } = await supabase
+          .from('rooms')
+          .select('*')
+          .eq('id', roomId)
+          .single();
+        
+        if (roomError) throw new Error('Room not found');
+        
+        // Fetch this room's details and set as current
+        await fetchRooms();
+        const updatedRoom = rooms.find(r => r.id === roomId);
+        if (!updatedRoom) throw new Error('Room not found after refresh');
+        
+        // Check if user is already a participant
+        const { data: existingParticipant, error: checkError } = await supabase
+          .from('room_participants')
+          .select('*')
+          .eq('room_id', roomId)
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+
+        if (checkError) throw checkError;
+
+        // If not already a participant, add them
+        if (!existingParticipant) {
+          const { error: joinError } = await supabase
+            .from('room_participants')
+            .insert({
+              room_id: roomId,
+              user_id: currentUser.id,
+              is_moderator: false,
+              is_speaking: false
+            });
+
+          if (joinError) throw joinError;
+        }
+
+        setCurrentRoom(updatedRoom);
+        toast(`Joined ${updatedRoom.name}`);
         return;
       }
 
@@ -212,7 +275,8 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
           .insert({
             room_id: roomId,
             user_id: currentUser.id,
-            is_moderator: false
+            is_moderator: false,
+            is_speaking: false
           });
 
         if (joinError) throw joinError;
@@ -225,6 +289,7 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       // Refresh rooms data to get latest participants
       fetchRooms();
     } catch (error: any) {
+      console.error('Error joining room:', error);
       toast.error(error.message || 'Failed to join room');
     } finally {
       setIsLoading(false);
@@ -249,6 +314,7 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       // Refresh rooms data
       fetchRooms();
     } catch (error: any) {
+      console.error('Error leaving room:', error);
       toast.error(error.message || 'Failed to leave room');
     }
   }, [currentRoom, currentUser]);
@@ -266,7 +332,10 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
         .from('rooms')
         .insert({
           name: roomData.name || 'New Room',
+          description: roomData.description || 'Join the conversation',
+          topic: roomData.topic || 'General',
           created_by: currentUser.id,
+          is_active: true
         })
         .select()
         .single();
@@ -279,7 +348,8 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
         .insert({
           room_id: newRoom.id,
           user_id: currentUser.id,
-          is_moderator: true
+          is_moderator: true,
+          is_speaking: false
         });
 
       if (participantError) throw participantError;
@@ -289,7 +359,10 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       // Refresh rooms and join the new room
       await fetchRooms();
       await joinRoom(newRoom.id);
+      
+      return newRoom.id;
     } catch (error: any) {
+      console.error('Error creating room:', error);
       toast.error(error.message || 'Failed to create room');
     } finally {
       setIsLoading(false);
@@ -322,6 +395,7 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
       // Refresh room data
       fetchRooms();
     } catch (error: any) {
+      console.error('Error updating speaking status:', error);
       toast.error(error.message || 'Failed to update speaking status');
     }
   }, [currentRoom, currentUser, fetchRooms]);

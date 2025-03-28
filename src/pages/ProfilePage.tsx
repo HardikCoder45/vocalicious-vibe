@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useUser } from '@/context/UserContext';
 import Avatar from '@/components/Avatar';
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Edit2, Save, Users, Mic, BookMarked, Calendar, Camera } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import RoomCard from '@/components/RoomCard';
 import { useRoom } from '@/context/RoomContext';
 import { useNavigate } from 'react-router-dom';
@@ -16,8 +15,8 @@ import ParticleBackground from '@/components/ParticleBackground';
 import { toast } from "sonner";
 
 const ProfilePage = () => {
-  const { profile, updateProfile, uploadAvatar, isLoading } = useUser();
-  const { rooms, joinRoom } = useRoom();
+  const { profile, updateProfile, uploadAvatar, isLoading: userLoading } = useUser();
+  const { rooms, joinRoom, isLoading: roomsLoading, fetchRooms } = useRoom();
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
@@ -27,12 +26,40 @@ const ProfilePage = () => {
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  useEffect(() => {
+    // Initial data loading
+    const loadData = async () => {
+      try {
+        await fetchRooms();
+      } catch (error) {
+        console.error('Error fetching rooms in profile:', error);
+      } finally {
+        // Short delay to prevent flashing
+        setTimeout(() => setIsLoading(false), 300);
+      }
+    };
+    
+    loadData();
+  }, [fetchRooms]);
+  
+  useEffect(() => {
+    // Update form data when profile changes
+    if (profile) {
+      setFormData({
+        name: profile.name || '',
+        username: profile.username || '',
+        bio: profile.bio || '',
+      });
+    }
+  }, [profile]);
   
   const handleEdit = () => {
     if (profile) {
       setFormData({
         name: profile.name || '',
-        username: profile.username,
+        username: profile.username || '',
         bio: profile.bio || '',
       });
     }
@@ -52,8 +79,10 @@ const ProfilePage = () => {
         bio: formData.bio,
       });
       setIsEditing(false);
+      toast.success('Profile updated successfully');
     } catch (error) {
       console.error('Error updating profile:', error);
+      toast.error('Failed to update profile');
     }
   };
   
@@ -61,9 +90,13 @@ const ProfilePage = () => {
     setIsEditing(false);
   };
   
-  const handleJoinRoom = (roomId: string) => {
-    joinRoom(roomId);
-    navigate(`/room/${roomId}`);
+  const handleJoinRoom = async (roomId: string) => {
+    try {
+      await joinRoom(roomId);
+      navigate(`/room/${roomId}`);
+    } catch (error) {
+      console.error('Error joining room:', error);
+    }
   };
 
   const handleAvatarClick = () => {
@@ -103,13 +136,25 @@ const ProfilePage = () => {
     room.speakers.some(speaker => speaker.id === profile?.id)
   );
   
-  if (isLoading || !profile) {
+  if ((userLoading || isLoading) && !profile) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-center">
           <div className="h-20 w-20 bg-muted rounded-full mx-auto mb-4"></div>
           <div className="h-6 w-40 bg-muted rounded mx-auto mb-2"></div>
           <div className="h-4 w-60 bg-muted rounded mx-auto"></div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold mb-4">Profile Not Found</h2>
+          <p className="mb-4">Please log in to view your profile</p>
+          <Button onClick={() => navigate('/auth')}>Go to Login</Button>
         </div>
       </div>
     );

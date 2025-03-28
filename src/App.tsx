@@ -27,6 +27,7 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 30000, // 30 seconds
     },
   },
 });
@@ -35,6 +36,13 @@ const queryClient = new QueryClient({
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useUser();
   const location = useLocation();
+  
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      // Log the redirect for debugging
+      console.log(`Redirecting from ${location.pathname} to /auth because user is not authenticated`);
+    }
+  }, [isLoading, isAuthenticated, location.pathname]);
   
   if (isLoading) {
     return (
