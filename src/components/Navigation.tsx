@@ -6,10 +6,11 @@ import { Home, Users, Search, UserCircle, Settings, LogOut, LogIn } from "lucide
 import ThemeSelector from './ThemeSelector';
 import { useUser } from '@/context/UserContext';
 import Avatar from './Avatar';
+import { toast } from "sonner";
 
 const Navigation: React.FC = () => {
   const location = useLocation();
-  const { currentUser, profile, logout, isAuthenticated } = useUser();
+  const { currentUser, profile, logout, isAuthenticated, isLoading } = useUser();
   const navigate = useNavigate();
   
   const isActive = (path: string) => {
@@ -17,8 +18,12 @@ const Navigation: React.FC = () => {
   };
   
   const handleLogout = async () => {
-    await logout();
-    navigate('/auth');
+    try {
+      await logout();
+      navigate('/auth');
+    } catch (error) {
+      toast.error('Failed to logout');
+    }
   };
 
   const handleLogin = () => {
@@ -69,7 +74,17 @@ const Navigation: React.FC = () => {
         
         <div className="flex justify-around w-full md:flex-col md:gap-2">
           {filteredNavItems.map((item) => (
-            <Link key={item.path} to={item.path}>
+            <Link 
+              key={item.path} 
+              to={item.path}
+              onClick={(e) => {
+                if (item.protected && !isAuthenticated) {
+                  e.preventDefault();
+                  navigate('/auth');
+                  toast('Please login to access this feature');
+                }
+              }}
+            >
               <Button
                 variant={isActive(item.path) ? "default" : "ghost"}
                 size="icon"
@@ -95,7 +110,11 @@ const Navigation: React.FC = () => {
         <div className="hidden md:flex md:flex-col md:gap-2 md:mt-auto">
           <ThemeSelector />
           
-          {isAuthenticated ? (
+          {isLoading ? (
+            <div className="flex justify-center p-2">
+              <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full"></div>
+            </div>
+          ) : isAuthenticated ? (
             <div className="flex flex-col items-center gap-2 pt-4 border-t">
               <Link to="/profile" className="w-full">
                 <div className="flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors">
@@ -139,6 +158,29 @@ const Navigation: React.FC = () => {
               <div className="hidden md:block absolute left-full ml-2 px-2 py-1 bg-popover text-popover-foreground rounded-md opacity-0 group-hover:opacity-100 transition-opacity">
                 Login
               </div>
+            </Button>
+          )}
+        </div>
+        
+        {/* Mobile auth buttons */}
+        <div className="fixed top-2 right-2 md:hidden">
+          {isAuthenticated ? (
+            <Link to="/profile">
+              <Avatar 
+                src={profile?.avatar_url || '/placeholder.svg'} 
+                alt={profile?.name || profile?.username || 'User'} 
+                size="sm" 
+              />
+            </Link>
+          ) : (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleLogin}
+              className="flex items-center gap-1"
+            >
+              <LogIn className="h-4 w-4" />
+              Login
             </Button>
           )}
         </div>

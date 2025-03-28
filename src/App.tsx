@@ -3,12 +3,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { RoomProvider } from "@/context/RoomContext";
 import { AudioProvider } from "@/context/AudioContext";
 import { UserProvider, useUser } from "@/context/UserContext";
 import Navigation from "@/components/Navigation";
+import { Suspense, lazy, useEffect } from "react";
 
 // Pages
 import Index from "./pages/Index";
@@ -20,13 +21,20 @@ import PeoplePage from "./pages/PeoplePage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
 import AuthPage from "./pages/AuthPage";
-import { Suspense, lazy } from "react";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
-// Protected route wrapper
+// Protected route wrapper with loading state
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, isLoading } = useUser();
+  const location = useLocation();
   
   if (isLoading) {
     return (
@@ -37,7 +45,30 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
   
   if (!isAuthenticated) {
-    return <Navigate to="/auth" replace />;
+    // Save the location for redirect after login
+    return <Navigate to="/auth" state={{ from: location }} replace />;
+  }
+  
+  return <>{children}</>;
+};
+
+// Authentication route wrapper for redirecting logged in users
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, isLoading } = useUser();
+  const location = useLocation();
+  
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
+  
+  if (isAuthenticated) {
+    // Redirect to saved location or home
+    const from = (location.state as any)?.from?.pathname || '/';
+    return <Navigate to={from} replace />;
   }
   
   return <>{children}</>;
@@ -62,7 +93,11 @@ const App = () => (
                       </div>
                     }>
                       <Routes>
-                        <Route path="/auth" element={<AuthPage />} />
+                        <Route path="/auth" element={
+                          <AuthRoute>
+                            <AuthPage />
+                          </AuthRoute>
+                        } />
                         <Route path="/" element={<Index />} />
                         <Route path="/room/:roomId" element={
                           <ProtectedRoute>

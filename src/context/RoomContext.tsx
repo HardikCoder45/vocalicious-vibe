@@ -99,7 +99,7 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
           // Get participants
           const { data: participants, error: participantsError } = await supabase
             .from('room_participants')
-            .select('*, user_profiles(id, username, name, avatar_url)')
+            .select('*, user_id')
             .eq('room_id', room.id);
 
           if (participantsError) {
@@ -107,18 +107,31 @@ export const RoomProvider: React.FC<{children: React.ReactNode}> = ({ children }
             return null;
           }
 
-          // Format speakers from participants
-          const speakers = participants.map((participant) => {
-            const profile = participant.user_profiles;
+          // Fetch user profiles for each participant
+          const speakersPromises = participants.map(async (participant) => {
+            const { data: userProfile, error: profileError } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('id', participant.user_id)
+              .single();
+
+            if (profileError) {
+              console.error('Error fetching user profile:', profileError);
+              return null;
+            }
+
             return {
-              id: profile.id,
-              name: profile.name || profile.username,
-              username: profile.username,
-              avatar: profile.avatar_url || '/placeholder.svg',
+              id: userProfile.id,
+              name: userProfile.name || userProfile.username,
+              username: userProfile.username,
+              avatar: userProfile.avatar_url || '/placeholder.svg',
               isModerator: participant.is_moderator,
               isSpeaking: participant.is_speaking,
             };
           });
+
+          const speakersData = await Promise.all(speakersPromises);
+          const speakers = speakersData.filter((speaker): speaker is Speaker => speaker !== null);
 
           // Generate a gradient color based on the room name
           const colors = [

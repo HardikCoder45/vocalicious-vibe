@@ -20,7 +20,7 @@ interface UserContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, username?: string, avatarFile?: File) => Promise<void>;
   updateProfile: (userData: Partial<Profile>) => Promise<void>;
   uploadAvatar: (file: File) => Promise<string>;
 }
@@ -93,7 +93,9 @@ export const UserProvider: React.FC<{children: React.ReactNode}> = ({ children }
         return;
       }
       
-      setProfile(data);
+      if (data) {
+        setProfile(data as Profile);
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
@@ -103,7 +105,7 @@ export const UserProvider: React.FC<{children: React.ReactNode}> = ({ children }
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
@@ -111,7 +113,6 @@ export const UserProvider: React.FC<{children: React.ReactNode}> = ({ children }
       if (error) throw error;
       
       toast.success('Logged in successfully');
-      return data;
     } catch (error: any) {
       toast.error(error.message || 'Failed to login');
       throw error;
@@ -120,22 +121,46 @@ export const UserProvider: React.FC<{children: React.ReactNode}> = ({ children }
     }
   };
 
-  const register = async (email: string, password: string) => {
+  const register = async (email: string, password: string, username?: string, avatarFile?: File) => {
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // Use the provided username or extract it from email
+      const finalUsername = username || email.split('@')[0];
+      
+      // Register the user
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
+          data: {
+            username: finalUsername,
+          },
           emailRedirectTo: window.location.origin,
         }
       });
       
       if (error) throw error;
       
+      // The profile will be created by the database trigger
+      // If there's an avatar file, upload it after successful registration
+      if (avatarFile) {
+        // Wait for auth state to update with the new user
+        setTimeout(async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            try {
+              const avatarUrl = await uploadAvatar(avatarFile);
+              await updateProfile({ avatar_url: avatarUrl });
+            } catch (uploadError) {
+              console.error('Failed to upload avatar:', uploadError);
+              // Continue with registration even if avatar upload fails
+            }
+          }
+        }, 1000);
+      }
+      
       toast.success('Registration successful!');
-      return data;
     } catch (error: any) {
       toast.error(error.message || 'Failed to register');
       throw error;
