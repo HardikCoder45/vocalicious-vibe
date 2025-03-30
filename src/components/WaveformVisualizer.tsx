@@ -1,65 +1,72 @@
-
-import React, { useEffect, useState, useRef } from 'react';
-import { useAudio } from '@/context/AudioContext';
+import React, { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 
 interface WaveformVisualizerProps {
-  active?: boolean;
-  size?: 'sm' | 'md' | 'lg';
+  isSpeaking: boolean;
   color?: string;
-  speakerId?: string;
+  barCount?: number;
+  className?: string;
+  height?: number;
 }
 
 const WaveformVisualizer: React.FC<WaveformVisualizerProps> = ({ 
-  active = false, 
-  size = 'md', 
+  isSpeaking = false, 
   color = 'bg-primary',
-  speakerId
+  barCount = 5,
+  className = '',
+  height = 20
 }) => {
-  const { generateWaveform, activeSpeakers } = useAudio();
-  const [heights, setHeights] = useState<number[]>([]);
-  const intervalRef = useRef<number | null>(null);
+  const [audioLevels, setAudioLevels] = useState<number[]>([]);
   
-  const isSpeaking = speakerId 
-    ? activeSpeakers.includes(speakerId) 
-    : active;
-
   useEffect(() => {
-    // Initial waveform
-    setHeights(generateWaveform());
-    
-    // Update waveform continuously if speaking
-    if (isSpeaking) {
-      intervalRef.current = window.setInterval(() => {
-        setHeights(generateWaveform());
-      }, 150);
+    if (!isSpeaking) {
+      // Reset to minimal levels when not speaking
+      setAudioLevels(Array(barCount).fill(10));
+      return;
     }
     
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
+    // Generate random audio levels for visual effect
+    const generateAudioLevels = () => {
+      const baseLevel = 50; // Base level when speaking
+      const variation = 40; // Amount of random variation
+      
+      const newLevels = Array(barCount).fill(0).map(() => {
+        return baseLevel + Math.random() * variation;
+      });
+      
+      setAudioLevels(newLevels);
     };
-  }, [isSpeaking, generateWaveform]);
-
-  // Set heights based on size
-  const getBarHeight = (value: number) => {
-    const baseHeight = size === 'sm' ? 12 : size === 'md' ? 20 : 30;
-    return isSpeaking ? value * baseHeight : baseHeight * 0.3;
-  };
-
-  const getWidth = () => {
-    return size === 'sm' ? 'w-0.5' : size === 'md' ? 'w-1' : 'w-1.5';
-  };
-
+    
+    // Update audio levels periodically
+    const intervalId = setInterval(generateAudioLevels, 100);
+    
+    // Initial generation
+    generateAudioLevels();
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isSpeaking, barCount]);
+  
   return (
-    <div className="flex items-end justify-center h-full">
-      {heights.map((height, index) => (
+    <div 
+      className={cn(
+        "flex items-end justify-center gap-[2px] h-full w-full", 
+        className
+      )}
+      style={{ height: `${height}px` }}
+    >
+      {audioLevels.map((level, index) => (
         <div
           key={index}
-          className={`${getWidth()} mx-0.5 rounded-full ${color} transition-all duration-150`}
-          style={{ 
-            height: `${getBarHeight(height)}px`,
-            opacity: isSpeaking ? '1' : '0.5',
+          className={cn(
+            "w-[4px] rounded-full transition-all duration-[50ms]",
+            color,
+            isSpeaking ? "opacity-100" : "opacity-40"
+          )}
+          style={{
+            height: `${level}%`,
+            animationDelay: `${index * 0.05}s`
           }}
         />
       ))}

@@ -1,69 +1,95 @@
-# Welcome to your Lovable project
+# Vocalicious Vibe - WebRTC Voice Chat
 
-## Project info
+A real-time voice chat platform using WebRTC for direct peer-to-peer audio streaming.
 
-**URL**: https://lovable.dev/projects/543a8b9d-e90b-4c4a-bcc6-3d33142cab05
+## Features
 
-## How can I edit this code?
+- Real-time voice communication using pure WebRTC (no third-party services)
+- Room-based voice conversations
+- Visual indicators for speaking users
+- Voice activity detection
+- User profiles and authentication
+- Single server architecture (Frontend + Backend on port 8080)
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend**:
+  - React with TypeScript
+  - Socket.io client for signaling
+  - WebRTC for peer audio connections
+  - Tailwind CSS for styling
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/543a8b9d-e90b-4c4a-bcc6-3d33142cab05) and start prompting.
+- **Backend**:
+  - Express server
+  - Socket.io for WebRTC signaling
+  - In-memory room management
 
-Changes made via Lovable will be committed automatically to this repo.
+## Quick Start
 
-**Use your preferred IDE**
+1. Install dependencies:
+```bash
+npm install
+```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+2. Start the development server:
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+3. Open your browser and navigate to:
+```
+http://localhost:8080
+```
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## How It Works
 
-**Use GitHub Codespaces**
+1. **WebRTC Signaling**:
+   - When a user joins a room, they establish WebRTC connections with all other users
+   - Socket.io handles the signaling process (exchanging SDP offers/answers and ICE candidates)
+   - Audio streams are sent directly between peers without going through the server
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+2. **Voice Activity Detection**:
+   - The AudioContext API analyzes audio to detect when a user is speaking
+   - Speaking status is shared via signaling to update UI for all users
 
-## What technologies are used for this project?
+3. **Room Management**:
+   - Express API endpoints for getting room information
+   - Socket.io events for real-time room updates
 
-This project is built with .
+## API Endpoints
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- `GET /api/rooms` - List all active rooms
+- `GET /api/rooms/:roomId` - Get details for a specific room
 
-## How can I deploy this project?
+## Socket.io Events
 
-Simply open [Lovable](https://lovable.dev/projects/543a8b9d-e90b-4c4a-bcc6-3d33142cab05) and click on Share -> Publish.
+- `join-room`: Join a voice chat room
+- `leave-room`: Leave a voice chat room
+- `signal`: WebRTC signaling (offers, answers, candidates)
+- `speaking`: Voice activity detection
+- `user-connected`: New user joined
+- `user-disconnected`: User left
 
-## I want to use a custom domain - is that possible?
+## Configuration
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+You can adjust the ICE servers in `src/services/audioStreamService.ts` if needed. The default configuration uses Google's STUN servers.
+
+## Troubleshooting
+
+1. **Microphone Access Issues**:
+   - Make sure your browser has permission to access your microphone
+   - Check browser settings if you accidentally denied permission
+
+2. **Connection Issues**:
+   - Make sure you're on a network that allows WebRTC (some corporate firewalls block it)
+   - Try using a different network if having connectivity problems
+   - Use a modern browser that fully supports WebRTC (Chrome, Firefox, Safari, Edge)
+
+3. **Audio Quality Issues**:
+   - Use headphones to prevent echo
+   - Make sure you have a stable internet connection
+   - Close other applications using your microphone
+
+## License
+
+MIT

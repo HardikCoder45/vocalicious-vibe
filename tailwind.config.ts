@@ -1,4 +1,3 @@
-
 import type { Config } from "tailwindcss";
 
 export default {
@@ -143,6 +142,14 @@ export default {
 				'bounce-subtle': {
 					'0%, 100%': { transform: 'translateY(0)' },
 					'50%': { transform: 'translateY(-5px)' }
+				},
+				'pulse-slow': {
+					'0%, 100%': { opacity: '0.6' },
+					'50%': { opacity: '1' }
+				},
+				'skeleton-wave': {
+					'0%': { backgroundPosition: '200% 0' },
+					'100%': { backgroundPosition: '-200% 0' }
 				}
 			},
 			animation: {
@@ -165,6 +172,8 @@ export default {
 				'wave-delay-4': 'wave 1.2s ease-in-out 0.4s infinite',
 				'spin-slow': 'spin-slow 8s linear infinite',
 				'bounce-subtle': 'bounce-subtle 2s ease-in-out infinite',
+				'pulse-slow': 'pulse-slow 3s ease-in-out infinite',
+				'skeleton-wave': 'skeleton-wave 1.5s ease-in-out infinite',
 			}
 		}
 	},

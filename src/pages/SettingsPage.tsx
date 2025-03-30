@@ -1,12 +1,12 @@
-
 import React from 'react';
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Settings, Sun, Moon, BellRing, Volume2, Shield, Key, HelpCircle, LogOut } from "lucide-react";
+import { Settings, Sun, Moon, BellRing, Volume2, Shield, Key, HelpCircle, LogOut, Command } from "lucide-react";
 import { useTheme } from '@/context/ThemeContext';
 import { useUser } from '@/context/UserContext';
+import { useVoiceCommand } from '@/context/VoiceCommandContext';
 import { toast } from "sonner";
 import ThemeSelector from '@/components/ThemeSelector';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import ParticleBackground from '@/components/ParticleBackground';
 const SettingsPage = () => {
   const { theme } = useTheme();
   const { logout } = useUser();
+  const { isVoiceCommandEnabled, toggleVoiceCommand, availableCommands } = useVoiceCommand();
   
   const handleToggle = (setting: string) => {
     toast(`${setting} setting updated`);
@@ -139,6 +140,34 @@ const SettingsPage = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="voice-commands" className="font-medium">Voice Commands</Label>
+                <p className="text-sm text-muted-foreground">
+                  Control the app using voice commands
+                </p>
+              </div>
+              <Switch 
+                id="voice-commands" 
+                checked={isVoiceCommandEnabled}
+                onCheckedChange={toggleVoiceCommand}
+              />
+            </div>
+            
+            {isVoiceCommandEnabled && (
+              <div className="p-3 bg-muted/50 rounded-md">
+                <Label className="font-medium text-sm mb-2 block">Available Commands:</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {availableCommands.map(command => (
+                    <div key={command} className="flex items-center text-xs gap-1.5">
+                      <Command className="h-3 w-3" />
+                      <span>{command}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
             <div className="flex items-center justify-between">
               <div>
                 <Label htmlFor="enhance-voice" className="font-medium">Enhance Voice</Label>
