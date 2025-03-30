@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    allowedHosts: ["27af-2405-201-4038-2864-203b-231c-2dc8-b2ac.ngrok-free.app"],
+    allowedHosts: ["vocaliciousvibe.vercel.app"],
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
